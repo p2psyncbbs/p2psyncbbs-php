@@ -1,19 +1,50 @@
 <?php
 // 設定
 //$Mynode = 'die4game.wkeya.com/bbs18c/';
-$nodes = array( 'die4game.byethost18.com/bbs/board/', 'die4game.s601.xrea.com/bbs18c/board/');
-$bbs = 'board';
-$PATH = '../'.$bbs.'/';
-$key = '1380899186';  // 「同期テスト」スレッド
-$adminpass = '';  // makeboard.php実行のために管理者パスワードが必要
-$proxy = '';  // 使用しないときはこのまま
+$nodes = [ '', '', '']; // syncthread.txtからノードを読み込む
+$bbs = 'board'; // 自ノードの板ディレクトリ名
+$PATH = '../'.$bbs.'/'; // 自ノードのadminディレクトリ基準の板ディレクトリへの相対パス
+$adminpass = 'die4game';  // makeboard.php実行のために管理者パスワードが必要
+$proxy = '';  // プロキシurl。使用しないときはこのまま
+$logfp = fopen( 'synclog.txt', 'a'); // ログファイルのポインタ
+$syncthreadfp = fopen( 'syncthread.txt', 'r'); // 同期スレッドリストのポインタ
 
-$fp = fopen( 'synclog.txt', 'a');
-foreach ( $nodes as $node) {
-  fputs( $fp, time().' : '.threadSync( $bbs, $key, $node, $PATH, $adminpass, $proxy)."\n");
+while( $buf = fgets( $syncthreadfp)) {
+  list ( $key, $nodes[0], $nodes[1], $nodes[2]) = explode( '<>', $buf);
+  foreach ( $nodes as $node) {
+    if ( $node === '')
+      continue;
+    fputs( $logfp, time().' : '.threadSync( $bbs, $key, $node, $PATH, $adminpass, $proxy)."\n");
+  }
 }
-fclose( $fp);
+fclose( $logfp);
+fclose( $syncthreadfp);
 
+// index.htmlの更新
+$_GET['mode'] = 'remake';
+$_GET['bbs'] = $bbs;
+$_GET['check'] = 'check';
+$_COOKIE['adminpass'] = $adminpass;
+$_REQUEST['bbs'] = $bbs;
+require( 'makeboard.php');
+
+
+
+//==========//
+// 関数定義 //
+//==========//
+
+
+
+//-----------------
+// ログ書き込み関数
+//-----------------
+function logwrite( $fp = '', $message) {
+  fputs( $fp, time().' : '.$message."\n");
+}
+
+//-------------------------------------------------------------------------------------
+// スレッド同期関数
 // function threadSync( $bbs, $key, $node, $PATH, $adminpass, $proxy = '')
 // スレッドキーとノードURLを引数としてスレッド同期する関数
 // 手順: 目標ノードからスレッドログを取得 → 比較 → 新着・追加を取得
@@ -21,15 +52,16 @@ fclose( $fp);
 //       同期範囲限定はレスの書きこみ時間でなら可能
 //      「前回からの更新」で行う場合は前回の更新記録をどこかにとる必要がある
 //       スレッドログに更新時間も記録するべきか
-
+//-------------------------------------------------------------------------------------
 function threadSync( $bbs, $key, $node, $PATH, $adminpass, $proxy = '') {
 
   // 引数のチェック
   // キーは数字10桁、ノードはセキュリティ対策も兼て限定的な文字のみ
-  if ( !preg_match( '/\d{10}/', $key))
-    return 'キーが変です。';
+  if ( !preg_match( '/\d{10}/', $key)) {
+    return 'キーが変です。key: '.$key;
+  }
   if ( !preg_match('/^[-_.~a-zA-Z0-9\/:@]+$/', $node))
-    return 'ノードが変です。';
+    return 'ノードが変です。node: '.$node;
 
   // アクセスチェック
   // とりあえず、http接続のみ
@@ -109,7 +141,8 @@ function threadSync( $bbs, $key, $node, $PATH, $adminpass, $proxy = '') {
     }
   }
   // 取得できた新規スレッドログが無ければ終了
-  if ( !$threadlogDiff) return $url.' : 新着レス取得できず';
+  if ( !$threadlogDiff)
+    return $url.' : 新着レス取得できず';
   // スレッドログ・レスを記録
   $p2p_fp = fopen( $p2p_thread_path, 'a');
   flock( $p2p_fp, LOCK_EX);
@@ -148,13 +181,7 @@ function threadSync( $bbs, $key, $node, $PATH, $adminpass, $proxy = '') {
   $sage = 1;
   renew_subject_txt( $PATH, $key, $sage, true, $subtt);
 
-  // index.htmlの更新
-  $_GET['mode'] = 'remake';
-  $_GET['bbs'] = $bbs;
-  $_GET['check'] = 'check';
-  $_COOKIE['adminpass'] = $adminpass;
-  $_REQUEST['bbs'] = $bbs;
-  require( 'makeboard.php');
+  return $url.' : 更新';
 }
 
 //------------------------
